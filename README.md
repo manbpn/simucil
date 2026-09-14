@@ -24,6 +24,11 @@ Contoh struktur bawaan (seed data):
 - Input absensi harian per kelas (status: Hadir, Sakit, Izin, Alpa)
 - Laporan harian (dengan ringkasan jumlah per status) dan laporan bulanan
 - Jadwal piket harian: menugaskan Guru Piket ke kampus tertentu per tanggal
+- **Lapor terlambat mandiri via QR code** — siswa yang datang terlambat scan QR
+  di gerbang/pos satpam, isi form singkat (kelas, nama, jam tiba, alasan) lewat
+  HP mereka sendiri **tanpa perlu login**, dan datanya langsung masuk ke sistem
+  absensi dengan status **Terlambat** — otomatis muncul di laporan harian &
+  bulanan, tanpa admin perlu input manual satu-satu
 - **Kirim pesan WhatsApp ke orang tua** lewat tautan `wa.me` (dibuka manual oleh
   admin/guru piket, gratis, tanpa risiko pemblokiran nomor)
 - **Template pesan WA per kampus** yang bisa dibaca langsung dari **Google Sheet**
@@ -65,6 +70,25 @@ Contoh struktur bawaan (seed data):
 | Guru Piket | `gurupiket` | `piket123` | Dijadwalkan (contoh: Kampus 1 hari ini) |
 
 **Segera ganti semua password akun contoh setelah instalasi.**
+
+## Menyiapkan QR Code Lapor Terlambat
+
+1. Login sebagai Admin atau Super Admin, buka menu **Data Kampus**
+2. Klik tombol **"Lihat QR"** pada baris kampus yang sesuai
+3. Akan muncul gambar QR code beserta tautannya
+4. **Screenshot atau cetak** gambar QR tersebut, tempel di pos satpam/gerbang kampus
+5. Siswa yang terlambat tinggal scan QR itu dengan HP mereka, isi form singkat
+   (kelas, nama, jam tiba, alasan), dan data langsung tersimpan ke sistem —
+   tanpa perlu login atau instal aplikasi apa pun
+
+Setiap kampus punya QR/tautan sendiri-sendiri (otomatis hanya menampilkan
+kelas & siswa dari kampus tersebut), jadi pastikan QR yang dicetak di
+Kampus 1 tidak tertukar dengan QR Kampus 2 atau 3.
+
+**Catatan keamanan:** karena halaman ini bisa diakses siapa saja tanpa login
+(supaya mudah dipakai siswa), data yang bisa dikirim dibatasi hanya status
+"Terlambat" untuk tanggal hari itu saja — tidak bisa dipakai untuk mengubah
+data absensi lain atau tanggal yang sudah lewat.
 
 ## Menyiapkan template pesan WA via Google Apps Script
 
@@ -113,6 +137,7 @@ sistem-absensi/
 ├── data/              # Berkas database SQLite (dibuat otomatis)
 └── public/
     ├── index.html     # Halaman login
+    ├── lapor-terlambat.html  # Halaman publik (tanpa login) untuk siswa lapor terlambat
     ├── css/style.css
     ├── js/app.js       # Helper API, sidebar navigasi, & logika template WA
     └── app/

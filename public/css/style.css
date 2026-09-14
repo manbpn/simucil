@@ -15,6 +15,7 @@
   --sakit: #B3742B;
   --izin: #3A6EA5;
   --alpa: #B3432B;
+  --terlambat: #8B5FBF;
   --shadow: 0 1px 2px rgba(23, 66, 59, 0.06);
   --radius: 10px;
 }
@@ -331,11 +332,13 @@ tr:last-child td { border-bottom: none; }
 .badge-sakit { background: #F6E9D8; color: var(--sakit); }
 .badge-izin  { background: #E1EAF3; color: var(--izin); }
 .badge-alpa  { background: #F5E1DA; color: var(--alpa); }
+.badge-terlambat { background: #EDE4F5; color: var(--terlambat); }
 .badge-kosong { background: #EFEAD9; color: #8A7B54; }
 
 .status-picker {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .status-picker button {
@@ -353,6 +356,7 @@ tr:last-child td { border-bottom: none; }
 .status-picker button.sel-Sakit.selected { background: var(--sakit); color: #fff; border-color: var(--sakit); }
 .status-picker button.sel-Izin.selected  { background: var(--izin);  color: #fff; border-color: var(--izin); }
 .status-picker button.sel-Alpa.selected  { background: var(--alpa);  color: #fff; border-color: var(--alpa); }
+.status-picker button.sel-Terlambat.selected { background: var(--terlambat); color: #fff; border-color: var(--terlambat); }
 
 .empty-state {
   text-align: center;

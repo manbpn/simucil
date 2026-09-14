@@ -181,6 +181,74 @@ app.get("/api/template-pesan", requireAuth, async (req, res) => {
   }
 });
 
+// ---------- Lapor Terlambat (publik, tanpa login — diakses via QR code) ----------
+// Endpoint di bawah ini SENGAJA tidak pakai requireAuth karena diisi langsung oleh
+// siswa lewat HP mereka. Hanya mengizinkan status 'Terlambat' pada tanggal hari ini,
+// dan hanya field minimal (bukan data sensitif) yang dikembalikan.
+
+app.get("/api/public/kampus", (req, res) => {
+  const rows = db.prepare("SELECT id, nama_kampus FROM kampus ORDER BY nama_kampus").all();
+  res.json(rows);
+});
+
+app.get("/api/public/kelas", (req, res) => {
+  const { kampus_id } = req.query;
+  if (!kampus_id) return res.status(400).json({ error: "kampus_id wajib diisi." });
+  const rows = db
+    .prepare("SELECT id, nama_kelas FROM kelas WHERE kampus_id = ? ORDER BY nama_kelas")
+    .all(kampus_id);
+  res.json(rows);
+});
+
+app.get("/api/public/siswa", (req, res) => {
+  const { kelas_id } = req.query;
+  if (!kelas_id) return res.status(400).json({ error: "kelas_id wajib diisi." });
+  const rows = db
+    .prepare(
+      "SELECT id, nis, nama FROM siswa WHERE kelas_id = ? AND status_aktif = 1 ORDER BY nama"
+    )
+    .all(kelas_id);
+  res.json(rows);
+});
+
+app.post("/api/public/lapor-terlambat", (req, res) => {
+  const { siswa_id, alasan, jam_datang } = req.body || {};
+  if (!siswa_id || !alasan || !String(alasan).trim()) {
+    return res.status(400).json({ error: "Siswa dan alasan keterlambatan wajib diisi." });
+  }
+  const siswa = db
+    .prepare(
+      `SELECT s.*, k.nama_kelas, ka.nama_kampus FROM siswa s
+       JOIN kelas k ON k.id = s.kelas_id
+       JOIN kampus ka ON ka.id = k.kampus_id
+       WHERE s.id = ? AND s.status_aktif = 1`
+    )
+    .get(siswa_id);
+  if (!siswa) return res.status(404).json({ error: "Data siswa tidak ditemukan." });
+
+  const tanggal = todayStr();
+  const keteranganParts = [];
+  if (jam_datang) keteranganParts.push(`Tiba jam ${jam_datang}`);
+  keteranganParts.push(`Alasan: ${String(alasan).trim()}`);
+  const keterangan = keteranganParts.join(". ");
+
+  db.prepare(
+    `INSERT INTO absensi (siswa_id, tanggal, status, keterangan, dicatat_oleh)
+     VALUES (?, ?, 'Terlambat', ?, NULL)
+     ON CONFLICT(siswa_id, tanggal) DO UPDATE SET
+       status = 'Terlambat',
+       keterangan = excluded.keterangan`
+  ).run(siswa_id, tanggal, keterangan);
+
+  res.json({
+    ok: true,
+    nama: siswa.nama,
+    nama_kelas: siswa.nama_kelas,
+    nama_kampus: siswa.nama_kampus,
+    tanggal,
+  });
+});
+
 // ---------- Kelas ----------
 app.get("/api/kelas", requireAuth, (req, res) => {
   const allowed = getAllowedKampus(req.session.user, todayStr());
@@ -415,7 +483,7 @@ app.get("/api/laporan/harian", requireAuth, (req, res) => {
   sql += " ORDER BY ka.nama_kampus, k.nama_kelas, s.nama";
   const rows = db.prepare(sql).all(...params);
 
-  const ringkasan = { Hadir: 0, Sakit: 0, Izin: 0, Alpa: 0, "Belum Dicatat": 0 };
+  const ringkasan = { Hadir: 0, Sakit: 0, Izin: 0, Alpa: 0, Terlambat: 0, "Belum Dicatat": 0 };
   for (const r of rows) {
     const key = r.status || "Belum Dicatat";
     ringkasan[key] = (ringkasan[key] || 0) + 1;
@@ -444,6 +512,7 @@ app.get("/api/laporan/bulanan", requireAuth, requireRole("admin", "super_admin")
            SUM(CASE WHEN a.status = 'Sakit' THEN 1 ELSE 0 END) AS sakit,
            SUM(CASE WHEN a.status = 'Izin' THEN 1 ELSE 0 END) AS izin,
            SUM(CASE WHEN a.status = 'Alpa' THEN 1 ELSE 0 END) AS alpa,
+           SUM(CASE WHEN a.status = 'Terlambat' THEN 1 ELSE 0 END) AS terlambat,
            COUNT(a.id) AS total_dicatat
     FROM siswa s
     JOIN kelas k ON k.id = s.kelas_id

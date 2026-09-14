@@ -25,7 +25,7 @@ function fmtTanggal(iso) {
 
 function badgeStatus(status) {
   if (!status) return `<span class="badge badge-kosong">Belum dicatat</span>`;
-  const map = { Hadir: "hadir", Sakit: "sakit", Izin: "izin", Alpa: "alpa" };
+  const map = { Hadir: "hadir", Sakit: "sakit", Izin: "izin", Alpa: "alpa", Terlambat: "terlambat" };
   return `<span class="badge badge-${map[status]}">${status}</span>`;
 }
 

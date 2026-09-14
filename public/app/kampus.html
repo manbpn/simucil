@@ -64,7 +64,7 @@
       }
       wrap.innerHTML = `
         <table>
-          <thead><tr><th>Nama Kampus</th><th>Alamat</th><th>URL Template Pesan (GAS)</th><th>Jumlah Kelas</th><th></th></tr></thead>
+          <thead><tr><th>Nama Kampus</th><th>Alamat</th><th>URL Template Pesan (GAS)</th><th>Jumlah Kelas</th><th>Lapor Terlambat</th><th></th></tr></thead>
           <tbody>
             ${rows
               .map(
@@ -73,6 +73,7 @@
                   <td>${k.alamat || "-"}</td>
                   <td style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${k.url_template_wa || ''}">${k.url_template_wa ? k.url_template_wa : '<span style="color:#8A9793;">Belum diatur (pakai template bawaan)</span>'}</td>
                   <td>${k.jumlah_kelas}</td>
+                  <td><button class="btn btn-outline" data-qr="${k.id}" data-nama="${k.nama_kampus}" style="padding:5px 10px; font-size:12.5px;">Lihat QR</button></td>
                   <td style="display:flex; gap:6px;">
                     ${editableOleh(k.id) ? `<button class="btn btn-outline" data-edit='${JSON.stringify(k)}' style="padding:5px 10px; font-size:12.5px;">Ubah</button>` : ""}
                     ${peranSaya === "super_admin" ? `<button class="btn btn-danger" data-hapus="${k.id}" style="padding:5px 10px; font-size:12.5px;">Hapus</button>` : ""}
@@ -81,7 +82,41 @@
               )
               .join("")}
           </tbody>
-        </table>`;
+        </table>
+        <div id="qr-modal-wrap"></div>`;
+
+      wrap.querySelectorAll("[data-qr]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const kampusId = btn.dataset.qr;
+          const namaKampus = btn.dataset.nama;
+          const link = `${window.location.origin}/lapor-terlambat.html?kampus_id=${kampusId}`;
+          const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(link)}`;
+          document.getElementById("qr-modal-wrap").innerHTML = `
+            <div style="position:fixed; inset:0; background:rgba(23,66,59,0.45); display:flex; align-items:center; justify-content:center; z-index:50;" id="qr-overlay">
+              <div style="background:#fff; border-radius:14px; padding:26px 28px; max-width:320px; text-align:center; box-shadow:0 20px 50px rgba(0,0,0,0.25);">
+                <h3 style="margin:0 0 4px 0; color:var(--teal-deep);">QR Lapor Terlambat</h3>
+                <p style="font-size:13px; color:#6E7D79; margin:0 0 16px 0;">${namaKampus}</p>
+                <img src="${qrImg}" alt="QR Code" style="border:1px solid var(--line); border-radius:8px;" />
+                <p style="font-size:11.5px; color:#8A9793; word-break:break-all; margin:14px 0 16px 0;">${link}</p>
+                <div style="display:flex; gap:8px; justify-content:center;">
+                  <button class="btn btn-outline" id="btn-copy-link" style="padding:6px 14px; font-size:13px;">Salin Tautan</button>
+                  <button class="btn btn-primary" id="btn-tutup-qr" style="padding:6px 14px; font-size:13px;">Tutup</button>
+                </div>
+                <p style="font-size:11px; color:#8A9793; margin-top:14px;">Cetak/screenshot QR ini dan tempel di pos satpam atau gerbang kampus.</p>
+              </div>
+            </div>`;
+          document.getElementById("btn-tutup-qr").addEventListener("click", () => {
+            document.getElementById("qr-modal-wrap").innerHTML = "";
+          });
+          document.getElementById("qr-overlay").addEventListener("click", (e) => {
+            if (e.target.id === "qr-overlay") document.getElementById("qr-modal-wrap").innerHTML = "";
+          });
+          document.getElementById("btn-copy-link").addEventListener("click", async () => {
+            await navigator.clipboard.writeText(link);
+            document.getElementById("btn-copy-link").textContent = "Tersalin!";
+          });
+        });
+      });
 
       wrap.querySelectorAll("[data-edit]").forEach((btn) => {
         btn.addEventListener("click", () => {

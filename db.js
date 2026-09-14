@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS absensi (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   siswa_id INTEGER NOT NULL,
   tanggal TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('Hadir','Sakit','Izin','Alpa')),
+  status TEXT NOT NULL CHECK (status IN ('Hadir','Sakit','Izin','Alpa','Terlambat')),
   keterangan TEXT,
   dicatat_oleh INTEGER,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -100,6 +100,36 @@ CREATE TABLE IF NOT EXISTS piket_jadwal (
   UNIQUE(user_id, kampus_id, tanggal)
 );
 `);
+
+// --- Migrasi: tambahkan status 'Terlambat' pada database lama yang sudah ada ---
+// (SQLite tidak bisa ALTER CHECK constraint langsung, jadi tabel dibuat ulang jika perlu)
+const absensiSchema = db
+  .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'absensi'")
+  .get();
+if (absensiSchema && !absensiSchema.sql.includes("Terlambat")) {
+  db.exec(`
+    ALTER TABLE absensi RENAME TO absensi_lama;
+
+    CREATE TABLE absensi (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      siswa_id INTEGER NOT NULL,
+      tanggal TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('Hadir','Sakit','Izin','Alpa','Terlambat')),
+      keterangan TEXT,
+      dicatat_oleh INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (siswa_id) REFERENCES siswa(id) ON DELETE CASCADE,
+      FOREIGN KEY (dicatat_oleh) REFERENCES users(id),
+      UNIQUE(siswa_id, tanggal)
+    );
+
+    INSERT INTO absensi (id, siswa_id, tanggal, status, keterangan, dicatat_oleh, created_at)
+      SELECT id, siswa_id, tanggal, status, keterangan, dicatat_oleh, created_at FROM absensi_lama;
+
+    DROP TABLE absensi_lama;
+  `);
+  console.log("Migrasi selesai: status 'Terlambat' ditambahkan ke tabel absensi.");
+}
 
 // --- Seed awal (hanya jika kosong) ---
 const kampusCount = db.prepare("SELECT COUNT(*) AS c FROM kampus").get().c;
