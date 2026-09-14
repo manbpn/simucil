@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ringkasan — Sistem Absensi Madrasah</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main">
+      <div class="page-header">
+        <h1>Ringkasan</h1>
+        <p id="tanggal-hari-ini"></p>
+      </div>
+
+      <div class="stat-grid" id="stat-grid"></div>
+
+      <div class="card">
+        <h2>Langkah cepat</h2>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <a href="/app/absensi.html" class="btn btn-primary" style="text-decoration:none;">Input absensi hari ini</a>
+          <a href="/app/laporan.html" class="btn btn-outline" style="text-decoration:none;">Lihat laporan</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    (async () => {
+      const me = await initShell("/app/dashboard.html");
+      if (!me) return;
+
+      const stats = await api("/api/stats");
+      document.getElementById("tanggal-hari-ini").textContent = fmtTanggal(stats.today);
+
+      let tiles;
+      if (stats.role === "guru_piket") {
+        const kampusText = stats.kampusTugasHariIni.length
+          ? stats.kampusTugasHariIni.join(", ")
+          : "Tidak ada tugas hari ini";
+        document.getElementById("tanggal-hari-ini").textContent = `${fmtTanggal(stats.today)} — Bertugas di: ${kampusText}`;
+        tiles = [
+          { label: "Total siswa di tugas Anda", value: stats.totalSiswaTugas },
+          { label: "Hadir hari ini", value: stats.hadirHariIni },
+          { label: "Belum dicatat hari ini", value: stats.belumDicatatHariIni },
+        ];
+      } else {
+        tiles = [
+          { label: "Total siswa aktif", value: stats.totalSiswa },
+          { label: "Total kampus", value: stats.totalKampus },
+          { label: "Total kelas", value: stats.totalKelas },
+          { label: "Hadir hari ini", value: stats.hadirHariIni },
+          { label: "Belum dicatat hari ini", value: stats.belumDicatatHariIni },
+        ];
+        if (stats.totalAdmin !== null) {
+          tiles.push({ label: "Total akun pengguna", value: stats.totalAdmin });
+        }
+      }
+
+      document.getElementById("stat-grid").innerHTML = tiles
+        .map(
+          (t) => `<div class="stat-tile"><div class="label">${t.label}</div><div class="value">${t.value}</div></div>`
+        )
+        .join("");
+    })();
+  </script>
+</body>
+</html>
