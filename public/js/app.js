@@ -96,6 +96,7 @@ const NAV_ITEMS = [
   { href: "/app/absensi.html", label: "Input Absensi", roles: ["admin", "super_admin", "guru_piket"] },
   { href: "/app/laporan.html", label: "Laporan", roles: ["admin", "super_admin"] },
   { href: "/app/siswa.html", label: "Data Siswa", roles: ["admin", "super_admin"] },
+  { href: "/app/import-siswa.html", label: "Import Siswa", roles: ["admin", "super_admin"] },
   { href: "/app/kelas.html", label: "Data Kelas", roles: ["admin", "super_admin"] },
   { href: "/app/kampus.html", label: "Data Kampus", roles: ["admin", "super_admin"] },
   { href: "/app/piket.html", label: "Jadwal Piket", roles: ["admin", "super_admin", "guru_piket"] },

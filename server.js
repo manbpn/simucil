@@ -7,7 +7,7 @@ const db = require("./db");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: "5mb" }));
 app.use(
   session({
     secret: "kunci-rahasia-madrasah-ubah-ini-di-produksi",
@@ -392,6 +392,87 @@ app.delete("/api/siswa/:id", requireAuth, requireRole("admin", "super_admin"), (
   }
   db.prepare("UPDATE siswa SET status_aktif = 0 WHERE id = ?").run(req.params.id);
   res.json({ ok: true });
+});
+
+// Import massal siswa dari Excel/CSV (diparse di browser, dikirim sebagai JSON array)
+// Setiap baris: { nis, nama, jenis_kelamin, nama_kelas, nama_ortu, nomor_wa_ortu }
+app.post("/api/siswa/import", requireAuth, requireRole("admin", "super_admin"), (req, res) => {
+  const { rows } = req.body || {};
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return res.status(400).json({ error: "Tidak ada data untuk diimpor." });
+  }
+
+  const allowed = getAllowedKampus(req.session.user, todayStr());
+
+  // Ambil semua kelas yang boleh diakses user ini, buat peta nama_kelas -> id
+  let kelasList;
+  if (allowed === null) {
+    kelasList = db.prepare("SELECT id, nama_kelas FROM kelas").all();
+  } else if (allowed.length === 0) {
+    kelasList = [];
+  } else {
+    kelasList = db
+      .prepare(`SELECT id, nama_kelas FROM kelas WHERE kampus_id IN (${allowed.map(() => "?").join(",")})`)
+      .all(...allowed);
+  }
+  const petaKelas = {};
+  for (const k of kelasList) {
+    petaKelas[k.nama_kelas.trim().toUpperCase()] = k.id;
+  }
+
+  const upsert = db.prepare(`
+    INSERT INTO siswa (nis, nama, jenis_kelamin, kelas_id, nama_ortu, nomor_wa_ortu)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(nis) DO UPDATE SET
+      nama = excluded.nama,
+      jenis_kelamin = excluded.jenis_kelamin,
+      kelas_id = excluded.kelas_id,
+      nama_ortu = excluded.nama_ortu,
+      nomor_wa_ortu = excluded.nomor_wa_ortu,
+      status_aktif = 1
+  `);
+
+  const hasil = { berhasil: 0, gagal: [] };
+
+  const trx = db.transaction((items) => {
+    items.forEach((row, idx) => {
+      const baris = idx + 2; // baris 1 = header
+      const nis = String(row.nis || "").trim();
+      const nama = String(row.nama || "").trim();
+      const namaKelas = String(row.nama_kelas || "").trim().toUpperCase();
+
+      if (!nis || !nama || !namaKelas) {
+        hasil.gagal.push({ baris, nama, alasan: "NIS, nama, atau kelas kosong" });
+        return;
+      }
+      const kelasId = petaKelas[namaKelas];
+      if (!kelasId) {
+        hasil.gagal.push({ baris, nama, alasan: `Kelas "${row.nama_kelas}" tidak ditemukan / bukan tanggung jawab Anda` });
+        return;
+      }
+      let jk = String(row.jenis_kelamin || "").trim().toUpperCase();
+      if (jk.startsWith("L")) jk = "L";
+      else if (jk.startsWith("P")) jk = "P";
+      else jk = null;
+
+      try {
+        upsert.run(
+          nis,
+          nama,
+          jk,
+          kelasId,
+          row.nama_ortu ? String(row.nama_ortu).trim() : null,
+          row.nomor_wa_ortu ? String(row.nomor_wa_ortu).trim() : null
+        );
+        hasil.berhasil++;
+      } catch (e) {
+        hasil.gagal.push({ baris, nama, alasan: "Gagal simpan (kemungkinan NIS duplikat di baris lain)" });
+      }
+    });
+  });
+  trx(rows);
+
+  res.json(hasil);
 });
 
 // ---------- Absensi ----------

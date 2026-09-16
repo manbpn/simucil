@@ -35,6 +35,8 @@ Contoh struktur bawaan (seed data):
   via Google Apps Script — admin cukup mengedit teks di Sheet, sistem otomatis
   memakai versi terbaru tanpa perlu redeploy
 - Manajemen akun pengguna & penugasan kampus (khusus Super Admin)
+- **Import data siswa massal** dari file Excel/CSV — tambah/perbarui ratusan
+  siswa sekaligus tanpa isi form satu per satu (menu **Import Siswa**)
 - Dashboard ringkasan statistik, disesuaikan per peran
 
 ## Teknologi
@@ -70,6 +72,25 @@ Contoh struktur bawaan (seed data):
 | Guru Piket | `gurupiket` | `piket123` | Dijadwalkan (contoh: Kampus 1 hari ini) |
 
 **Segera ganti semua password akun contoh setelah instalasi.**
+
+## Import data siswa dari Excel/CSV
+
+Menu **Import Siswa** (Admin/Super Admin) menerima file `.xlsx` atau `.csv`
+dengan baris pertama berisi judul kolom berikut (urutan bebas):
+
+| Kolom | Wajib? | Keterangan |
+|---|---|---|
+| NIS | Wajib | Harus unik; siswa dengan NIS yang sudah ada akan **diperbarui**, bukan diduplikasi |
+| Nama | Wajib | Nama lengkap |
+| Kelas | Wajib | Harus **persis sama** dengan nama kelas yang sudah dibuat di menu Data Kelas |
+| Jenis Kelamin | Opsional | `L` / `Laki-laki` / `P` / `Perempuan` |
+| Nama Ortu | Opsional | Nama orang tua/wali |
+| No WA Ortu | Opsional | Nomor WhatsApp, format bebas |
+
+Pastikan semua kelas yang dipakai di file sudah ada lebih dulu di menu
+**Data Kelas** sebelum melakukan import — baris dengan nama kelas yang tidak
+ditemukan akan dilaporkan gagal (beserta alasannya) tanpa membatalkan baris
+lain yang berhasil.
 
 ## Menyiapkan QR Code Lapor Terlambat
 
