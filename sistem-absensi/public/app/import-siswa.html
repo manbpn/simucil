@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Import Siswa — Sistem Absensi Madrasah</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main">
+      <div class="page-header">
+        <h1>Import Siswa</h1>
+        <p>Tambahkan atau perbarui banyak siswa sekaligus lewat file Excel/CSV.</p>
+      </div>
+
+      <div class="card">
+        <h2>Format file yang dibutuhkan</h2>
+        <p style="font-size:13.5px; color:#5B6B67; line-height:1.7;">
+          File Excel (.xlsx) atau CSV dengan baris pertama berisi judul kolom berikut
+          (urutan bebas, huruf besar/kecil tidak masalah):
+        </p>
+        <table style="margin-bottom:12px;">
+          <thead><tr><th>Nama Kolom</th><th>Wajib?</th><th>Keterangan</th></tr></thead>
+          <tbody>
+            <tr><td>NIS</td><td>Wajib</td><td>Nomor induk siswa, harus unik</td></tr>
+            <tr><td>Nama</td><td>Wajib</td><td>Nama lengkap siswa</td></tr>
+            <tr><td>Kelas</td><td>Wajib</td><td>Harus sama persis dengan nama kelas yang sudah ada di menu Data Kelas (contoh: XI-A)</td></tr>
+            <tr><td>Jenis Kelamin</td><td>Opsional</td><td>L / Laki-laki / P / Perempuan</td></tr>
+            <tr><td>Nama Ortu</td><td>Opsional</td><td>Nama orang tua/wali</td></tr>
+            <tr><td>No WA Ortu</td><td>Opsional</td><td>Nomor WhatsApp orang tua/wali</td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:12.5px; color:#8A9793;">
+          Siswa dengan NIS yang sudah ada akan <strong>diperbarui</strong> datanya (bukan dobel).
+          Pastikan semua kelas yang dipakai di file sudah dibuat lebih dulu di menu <strong>Data Kelas</strong>.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>Pilih file</h2>
+        <div id="msg"></div>
+        <input type="file" id="file-input" accept=".xlsx,.xls,.csv" />
+        <div id="preview-wrap" style="margin-top:18px;"></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    let dataTerparse = [];
+
+    // Mencocokkan nama kolom fleksibel (huruf besar/kecil, spasi, dsb) ke field baku
+    function normalisasiHeader(h) {
+      const k = String(h || "").trim().toLowerCase().replace(/[\s._-]/g, "");
+      if (["nis", "nomorinduksiswa"].includes(k)) return "nis";
+      if (["nama", "namalengkap", "namasiswa"].includes(k)) return "nama";
+      if (["kelas", "namakelas", "rombel"].includes(k)) return "nama_kelas";
+      if (["jeniskelamin", "jk", "gender"].includes(k)) return "jenis_kelamin";
+      if (["namaortu", "namawali", "orangtua", "wali"].includes(k)) return "nama_ortu";
+      if (["nowaortu", "nomorwaortu", "wa", "nowa", "notelepon", "notelp", "notlp", "nohp"].includes(k)) return "nomor_wa_ortu";
+      return null;
+    }
+
+    function renderPreview(rows) {
+      const wrap = document.getElementById("preview-wrap");
+      if (rows.length === 0) {
+        wrap.innerHTML = `<div class="empty-state">Tidak ada baris data yang terbaca dari file ini.</div>`;
+        return;
+      }
+      const contoh = rows.slice(0, 15);
+      wrap.innerHTML = `
+        <p style="font-size:13px; color:#5B6B67; margin-bottom:10px;">
+          Terbaca <strong>${rows.length}</strong> baris data. Pratinjau 15 baris pertama:
+        </p>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>NIS</th><th>Nama</th><th>Kelas</th><th>JK</th><th>Nama Ortu</th><th>No WA Ortu</th></tr></thead>
+            <tbody>
+              ${contoh
+                .map(
+                  (r) => `<tr><td>${r.nis || "-"}</td><td>${r.nama || "-"}</td><td>${r.nama_kelas || "-"}</td><td>${r.jenis_kelamin || "-"}</td><td>${r.nama_ortu || "-"}</td><td>${r.nomor_wa_ortu || "-"}</td></tr>`
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+        <button class="btn btn-primary" id="btn-import" style="margin-top:16px;">Import ${rows.length} Siswa Sekarang</button>
+      `;
+      document.getElementById("btn-import").addEventListener("click", jalankanImport);
+    }
+
+    async function jalankanImport() {
+      const msg = document.getElementById("msg");
+      const btn = document.getElementById("btn-import");
+      btn.disabled = true;
+      btn.textContent = "Memproses...";
+      msg.innerHTML = "";
+      try {
+        const hasil = await api("/api/siswa/import", {
+          method: "POST",
+          body: JSON.stringify({ rows: dataTerparse }),
+        });
+        let pesan = `<div class="msg msg-ok">Berhasil mengimpor ${hasil.berhasil} siswa.</div>`;
+        if (hasil.gagal.length > 0) {
+          pesan += `<div class="msg msg-error">
+            ${hasil.gagal.length} baris gagal:
+            <ul style="margin:8px 0 0 18px; padding:0;">
+              ${hasil.gagal
+                .slice(0, 30)
+                .map((g) => `<li>Baris ${g.baris} (${g.nama || "?"}): ${g.alasan}</li>`)
+                .join("")}
+              ${hasil.gagal.length > 30 ? `<li>...dan ${hasil.gagal.length - 30} baris lainnya</li>` : ""}
+            </ul>
+          </div>`;
+        }
+        msg.innerHTML = pesan;
+        document.getElementById("preview-wrap").innerHTML = "";
+        document.getElementById("file-input").value = "";
+      } catch (err) {
+        msg.innerHTML = `<div class="msg msg-error">${err.message}</div>`;
+      }
+      btn.disabled = false;
+      btn.textContent = "Import Sekarang";
+    }
+
+    (async () => {
+      const me = await initShell("/app/import-siswa.html");
+      if (!me) return;
+
+      document.getElementById("file-input").addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const msg = document.getElementById("msg");
+        msg.innerHTML = "";
+
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const wb = XLSX.read(ev.target.result, { type: "array" });
+            const sheet = wb.Sheets[wb.SheetNames[0]];
+            const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+            if (json.length === 0) {
+              msg.innerHTML = `<div class="msg msg-error">File kosong atau tidak terbaca.</div>`;
+              return;
+            }
+
+            // Petakan header kolom ke field baku
+            const headerAsli = Object.keys(json[0]);
+            const petaField = {};
+            headerAsli.forEach((h) => {
+              const field = normalisasiHeader(h);
+              if (field) petaField[h] = field;
+            });
+
+            dataTerparse = json
+              .map((row) => {
+                const obj = {};
+                for (const h in petaField) {
+                  obj[petaField[h]] = row[h];
+                }
+                return obj;
+              })
+              .filter((r) => r.nis || r.nama);
+
+            renderPreview(dataTerparse);
+          } catch (err) {
+            msg.innerHTML = `<div class="msg msg-error">Gagal membaca file: ${err.message}</div>`;
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Siswa — Sistem Absensi Madrasah</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main">
+      <div class="page-header">
+        <h1>Data Siswa</h1>
+        <p>Kelola daftar siswa aktif per kelas.</p>
+      </div>
+
+      <div class="card">
+        <h2 id="form-title">Tambah siswa</h2>
+        <div id="msg"></div>
+        <form id="form-siswa" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+          <input type="hidden" id="s-id" />
+          <div class="field">
+            <label for="s-nis">NIS</label>
+            <input type="text" id="s-nis" required />
+          </div>
+          <div class="field">
+            <label for="s-nama">Nama lengkap</label>
+            <input type="text" id="s-nama" required style="min-width:220px;" />
+          </div>
+          <div class="field">
+            <label for="s-jk">Jenis kelamin</label>
+            <select id="s-jk">
+              <option value="L">Laki-laki</option>
+              <option value="P">Perempuan</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="s-kelas">Kelas</label>
+            <select id="s-kelas" required></select>
+          </div>
+          <div class="field">
+            <label for="s-nama-ortu">Nama orang tua/wali</label>
+            <input type="text" id="s-nama-ortu" style="min-width:180px;" />
+          </div>
+          <div class="field">
+            <label for="s-wa-ortu">No. WA orang tua/wali</label>
+            <input type="text" id="s-wa-ortu" placeholder="0812xxxxxxxx" style="min-width:160px;" />
+          </div>
+          <button type="submit" class="btn btn-primary">Simpan</button>
+          <button type="button" class="btn btn-outline" id="btn-batal" style="display:none;">Batal</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Daftar siswa</h2>
+        <div class="card-toolbar">
+          <div class="field">
+            <label for="filter-kelas">Filter kelas</label>
+            <select id="filter-kelas"><option value="">Semua kelas</option></select>
+          </div>
+        </div>
+        <div id="tabel-siswa"></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    let kelasMap = {};
+
+    async function muatSiswa() {
+      const kelasId = document.getElementById("filter-kelas").value;
+      const url = kelasId ? `/api/siswa?kelas_id=${kelasId}` : "/api/siswa";
+      const rows = await api(url);
+      const wrap = document.getElementById("tabel-siswa");
+      if (rows.length === 0) {
+        wrap.innerHTML = `<div class="empty-state">Belum ada siswa terdaftar.</div>`;
+        return;
+      }
+      wrap.innerHTML = `
+        <table>
+          <thead><tr><th>NIS</th><th>Nama</th><th>Kelas</th><th>Orang Tua/Wali</th><th>No. WA</th><th></th></tr></thead>
+          <tbody>
+            ${rows
+              .map(
+                (s) => `<tr>
+                  <td>${s.nis}</td>
+                  <td>${s.nama}</td>
+                  <td>${s.nama_kelas}</td>
+                  <td>${s.nama_ortu || "-"}</td>
+                  <td>${s.nomor_wa_ortu || "-"}</td>
+                  <td style="display:flex; gap:6px;">
+                    <button class="btn btn-outline" data-edit='${JSON.stringify(s)}' style="padding:5px 10px; font-size:12.5px;">Ubah</button>
+                    <button class="btn btn-danger" data-hapus="${s.id}" style="padding:5px 10px; font-size:12.5px;">Hapus</button>
+                  </td>
+                </tr>`
+              )
+              .join("")}
+          </tbody>
+        </table>`;
+
+      wrap.querySelectorAll("[data-edit]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const s = JSON.parse(btn.dataset.edit);
+          document.getElementById("form-title").textContent = "Ubah siswa";
+          document.getElementById("s-id").value = s.id;
+          document.getElementById("s-nis").value = s.nis;
+          document.getElementById("s-nama").value = s.nama;
+          document.getElementById("s-jk").value = s.jenis_kelamin || "L";
+          document.getElementById("s-kelas").value = s.kelas_id;
+          document.getElementById("s-nama-ortu").value = s.nama_ortu || "";
+          document.getElementById("s-wa-ortu").value = s.nomor_wa_ortu || "";
+          document.getElementById("btn-batal").style.display = "inline-flex";
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+      });
+
+      wrap.querySelectorAll("[data-hapus]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          if (!confirm("Nonaktifkan siswa ini dari daftar?")) return;
+          await api(`/api/siswa/${btn.dataset.hapus}`, { method: "DELETE" });
+          muatSiswa();
+        });
+      });
+    }
+
+    function resetForm() {
+      document.getElementById("form-title").textContent = "Tambah siswa";
+      document.getElementById("form-siswa").reset();
+      document.getElementById("s-id").value = "";
+      document.getElementById("btn-batal").style.display = "none";
+    }
+
+    (async () => {
+      const me = await initShell("/app/siswa.html");
+      if (!me) return;
+
+      const kelasList = await api("/api/kelas");
+      const optKelas = kelasList.map((k) => `<option value="${k.id}">${k.nama_kelas}</option>`).join("");
+      document.getElementById("s-kelas").innerHTML = optKelas;
+      document.getElementById("filter-kelas").insertAdjacentHTML("beforeend", optKelas);
+
+      document.getElementById("filter-kelas").addEventListener("change", muatSiswa);
+      document.getElementById("btn-batal").addEventListener("click", resetForm);
+
+      document.getElementById("form-siswa").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const msg = document.getElementById("msg");
+        msg.innerHTML = "";
+        const id = document.getElementById("s-id").value;
+        const payload = {
+          nis: document.getElementById("s-nis").value.trim(),
+          nama: document.getElementById("s-nama").value.trim(),
+          jenis_kelamin: document.getElementById("s-jk").value,
+          kelas_id: document.getElementById("s-kelas").value,
+          nama_ortu: document.getElementById("s-nama-ortu").value.trim(),
+          nomor_wa_ortu: document.getElementById("s-wa-ortu").value.trim(),
+        };
+        try {
+          if (id) {
+            await api(`/api/siswa/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+            msg.innerHTML = `<div class="msg msg-ok">Data siswa diperbarui.</div>`;
+          } else {
+            await api("/api/siswa", { method: "POST", body: JSON.stringify(payload) });
+            msg.innerHTML = `<div class="msg msg-ok">Siswa baru ditambahkan.</div>`;
+          }
+          resetForm();
+          muatSiswa();
+        } catch (err) {
+          msg.innerHTML = `<div class="msg msg-error">${err.message}</div>`;
+        }
+      });
+
+      muatSiswa();
+    })();
+  </script>
+</body>
+</html>

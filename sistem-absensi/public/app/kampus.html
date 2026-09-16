@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Kampus — Sistem Absensi Madrasah</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main">
+      <div class="page-header">
+        <h1>Data Kampus</h1>
+        <p id="page-sub">Kelola lokasi/gedung madrasah dan template pesan WA masing-masing kampus.</p>
+      </div>
+
+      <div class="card" id="form-card" style="display:none;">
+        <h2 id="form-title">Tambah kampus</h2>
+        <div id="msg"></div>
+        <form id="form-kampus" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+          <input type="hidden" id="ka-id" />
+          <div class="field">
+            <label for="ka-nama">Nama kampus</label>
+            <input type="text" id="ka-nama" placeholder="Contoh: Kampus 1" required style="min-width:180px;" />
+          </div>
+          <div class="field">
+            <label for="ka-alamat">Alamat</label>
+            <input type="text" id="ka-alamat" style="min-width:240px;" />
+          </div>
+          <button type="submit" class="btn btn-primary">Simpan</button>
+          <button type="button" class="btn btn-outline" id="btn-batal" style="display:none;">Batal</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Daftar kampus</h2>
+        <p style="font-size:12.5px; color:#8A9793; margin-top:-8px;">
+          Kolom <strong>URL Template Pesan</strong> diisi dengan alamat Google Apps Script (Web App) yang
+          menghubungkan sistem ini ke Google Sheet berisi teks pesan WA untuk kampus tersebut. Isi Google Sheet
+          bisa langsung diubah kapan saja tanpa perlu membuka sistem ini — sistem akan otomatis membaca versi
+          terbaru setiap kali tombol "Kirim WA" dipakai. Lihat README untuk contoh skrip GAS-nya.
+        </p>
+        <div id="tabel-kampus"></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    let peranSaya = null;
+    let kampusSayaIds = [];
+
+    function editableOleh(kampusId) {
+      return peranSaya === "super_admin" || kampusSayaIds.includes(kampusId);
+    }
+
+    async function muatKampus() {
+      const rows = await api("/api/kampus");
+      const wrap = document.getElementById("tabel-kampus");
+      if (rows.length === 0) {
+        wrap.innerHTML = `<div class="empty-state">Belum ada kampus terdaftar.</div>`;
+        return;
+      }
+      wrap.innerHTML = `
+        <table>
+          <thead><tr><th>Nama Kampus</th><th>Alamat</th><th>URL Template Pesan (GAS)</th><th>Jumlah Kelas</th><th>Lapor Terlambat</th><th></th></tr></thead>
+          <tbody>
+            ${rows
+              .map(
+                (k) => `<tr>
+                  <td>${k.nama_kampus}</td>
+                  <td>${k.alamat || "-"}</td>
+                  <td style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${k.url_template_wa || ''}">${k.url_template_wa ? k.url_template_wa : '<span style="color:#8A9793;">Belum diatur (pakai template bawaan)</span>'}</td>
+                  <td>${k.jumlah_kelas}</td>
+                  <td><button class="btn btn-outline" data-qr="${k.id}" data-nama="${k.nama_kampus}" style="padding:5px 10px; font-size:12.5px;">Lihat QR</button></td>
+                  <td style="display:flex; gap:6px;">
+                    ${editableOleh(k.id) ? `<button class="btn btn-outline" data-edit='${JSON.stringify(k)}' style="padding:5px 10px; font-size:12.5px;">Ubah</button>` : ""}
+                    ${peranSaya === "super_admin" ? `<button class="btn btn-danger" data-hapus="${k.id}" style="padding:5px 10px; font-size:12.5px;">Hapus</button>` : ""}
+                  </td>
+                </tr>`
+              )
+              .join("")}
+          </tbody>
+        </table>
+        <div id="qr-modal-wrap"></div>`;
+
+      wrap.querySelectorAll("[data-qr]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const kampusId = btn.dataset.qr;
+          const namaKampus = btn.dataset.nama;
+          const link = `${window.location.origin}/lapor-terlambat.html?kampus_id=${kampusId}`;
+          const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(link)}`;
+          document.getElementById("qr-modal-wrap").innerHTML = `
+            <div style="position:fixed; inset:0; background:rgba(23,66,59,0.45); display:flex; align-items:center; justify-content:center; z-index:50;" id="qr-overlay">
+              <div style="background:#fff; border-radius:14px; padding:26px 28px; max-width:320px; text-align:center; box-shadow:0 20px 50px rgba(0,0,0,0.25);">
+                <h3 style="margin:0 0 4px 0; color:var(--teal-deep);">QR Lapor Terlambat</h3>
+                <p style="font-size:13px; color:#6E7D79; margin:0 0 16px 0;">${namaKampus}</p>
+                <img src="${qrImg}" alt="QR Code" style="border:1px solid var(--line); border-radius:8px;" />
+                <p style="font-size:11.5px; color:#8A9793; word-break:break-all; margin:14px 0 16px 0;">${link}</p>
+                <div style="display:flex; gap:8px; justify-content:center;">
+                  <button class="btn btn-outline" id="btn-copy-link" style="padding:6px 14px; font-size:13px;">Salin Tautan</button>
+                  <button class="btn btn-primary" id="btn-tutup-qr" style="padding:6px 14px; font-size:13px;">Tutup</button>
+                </div>
+                <p style="font-size:11px; color:#8A9793; margin-top:14px;">Cetak/screenshot QR ini dan tempel di pos satpam atau gerbang kampus.</p>
+              </div>
+            </div>`;
+          document.getElementById("btn-tutup-qr").addEventListener("click", () => {
+            document.getElementById("qr-modal-wrap").innerHTML = "";
+          });
+          document.getElementById("qr-overlay").addEventListener("click", (e) => {
+            if (e.target.id === "qr-overlay") document.getElementById("qr-modal-wrap").innerHTML = "";
+          });
+          document.getElementById("btn-copy-link").addEventListener("click", async () => {
+            await navigator.clipboard.writeText(link);
+            document.getElementById("btn-copy-link").textContent = "Tersalin!";
+          });
+        });
+      });
+
+      wrap.querySelectorAll("[data-edit]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const k = JSON.parse(btn.dataset.edit);
+          document.getElementById("form-card").style.display = "block";
+          document.getElementById("form-title").textContent = "Ubah kampus";
+          document.getElementById("ka-id").value = k.id;
+          document.getElementById("ka-nama").value = k.nama_kampus;
+          document.getElementById("ka-nama").disabled = peranSaya !== "super_admin";
+          document.getElementById("ka-alamat").value = k.alamat || "";
+          document.getElementById("ka-url").value = k.url_template_wa || "";
+          document.getElementById("btn-batal").style.display = "inline-flex";
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+      });
+
+      wrap.querySelectorAll("[data-hapus]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          if (!confirm("Hapus kampus ini? Semua kelas & siswa di dalamnya akan ikut terhapus.")) return;
+          await api(`/api/kampus/${btn.dataset.hapus}`, { method: "DELETE" });
+          muatKampus();
+        });
+      });
+    }
+
+    function resetForm() {
+      document.getElementById("form-title").textContent = "Tambah kampus";
+      document.getElementById("form-kampus").reset();
+      document.getElementById("ka-id").value = "";
+      document.getElementById("ka-nama").disabled = false;
+      document.getElementById("btn-batal").style.display = "none";
+      if (peranSaya !== "super_admin") document.getElementById("form-card").style.display = "none";
+    }
+
+    (async () => {
+      const me = await initShell("/app/kampus.html");
+      if (!me) return;
+      peranSaya = me.role;
+
+      // Tambahkan field URL template ke form (disisipkan lewat JS supaya lebih mudah dikelola)
+      document.getElementById("form-kampus").insertAdjacentHTML(
+        "afterbegin",
+        `<div class="field" style="order:99; flex-basis:100%;">
+           <label for="ka-url">URL Template Pesan (Google Apps Script)</label>
+           <input type="url" id="ka-url" placeholder="https://script.google.com/macros/s/xxx/exec" style="min-width:340px;" />
+         </div>`
+      );
+      // pindahkan field url ke akhir form sebelum tombol
+      const urlField = document.querySelector('label[for="ka-url"]').parentElement;
+      document.getElementById("btn-batal").before(urlField);
+
+      if (peranSaya === "super_admin") {
+        document.getElementById("form-card").style.display = "block";
+      } else {
+        // admin: ambil daftar kampus miliknya untuk menentukan tombol mana yang aktif
+        const kampusList = await api("/api/kampus");
+        kampusSayaIds = kampusList.map((k) => k.id);
+        document.getElementById("page-sub").textContent =
+          "Anda dapat memperbarui alamat dan URL template pesan WA untuk kampus yang menjadi tanggung jawab Anda.";
+      }
+
+      document.getElementById("btn-batal").addEventListener("click", resetForm);
+
+      document.getElementById("form-kampus").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const msg = document.getElementById("msg");
+        msg.innerHTML = "";
+        const id = document.getElementById("ka-id").value;
+        const payload = {
+          nama_kampus: document.getElementById("ka-nama").value.trim(),
+          alamat: document.getElementById("ka-alamat").value.trim(),
+          url_template_wa: document.getElementById("ka-url").value.trim(),
+        };
+        try {
+          if (id) {
+            await api(`/api/kampus/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+            msg.innerHTML = `<div class="msg msg-ok">Data kampus diperbarui.</div>`;
+          } else {
+            await api("/api/kampus", { method: "POST", body: JSON.stringify(payload) });
+            msg.innerHTML = `<div class="msg msg-ok">Kampus baru ditambahkan.</div>`;
+          }
+          resetForm();
+          muatKampus();
+        } catch (err) {
+          msg.innerHTML = `<div class="msg msg-error">${err.message}</div>`;
+        }
+      });
+
+      muatKampus();
+    })();
+  </script>
+</body>
+</html>
